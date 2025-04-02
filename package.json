@@ -1,7 +1,7 @@
 {
   "name": "agent-content-creation",
   "version": "1.0.0",
-  "description": "",
+  "description": "├── README.md ├── package.json ├── .env                (Optional, for storing environment variables) ├── server.js           (Main application file - will contain API setup) ├── videos/             (Directory to store generated video files) ├── .gitignore └── ... (other project files - e.g., for video generation logic)",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
