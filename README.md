@@ -1,7 +1,5 @@
-├── README.md
-├── package.json
-├── .env                (Optional, for storing environment variables)
-├── server.js           (Main application file - will contain API setup)
-├── videos/             (Directory to store generated video files)
-├── .gitignore
-└── ... (other project files - e.g., for video generation logic)
+├── package.json            - Project dependencies and scripts
+├── .env                    - (Optional) Environment variables (e.g., API keys)
+├── index.js                - Main application file (API setup and server)
+├── videos/                 - Directory to store generated video files
+├── .gitignore              - Specifies intentionally untracked files
