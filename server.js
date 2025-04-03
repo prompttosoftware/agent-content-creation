@@ -25,7 +25,7 @@ app.post('/agent/done', (req, res) => {
 
   try {
     removeAgentContent(agentId);
-    res.send('Agent removed');
+    res.send(`Agent ${agentId} removed`);
   } catch (error) {
     console.error('Error removing agent:', error);
     res.status(500).send('Error removing agent');
