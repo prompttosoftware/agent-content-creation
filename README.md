@@ -38,12 +38,48 @@ This project is a Node.js application that generates and uploads YouTube videos 
     git clone <repository_url>  # Replace with your repository URL if applicable.
     cd <project_directory>  # Navigate into the project directory.
     npm init -y # Initialize a package.json file if not already present.
-    npm install express fluent-ffmpeg googleapis  # Install necessary dependencies.  Adapt dependencies based on your chosen video editing library.
     ```
 
-3.  **Configuration:**
+3.  **Installation:**
+    ```bash
+    npm install
+    ```
+    This command will install all the project dependencies listed in the `package.json` file.
+
+4.  **Configuration:**
     *   **YouTube API Credentials:** Set up a project in the Google Cloud Console and obtain API credentials (client ID, client secret, etc.).  Store these securely (e.g., environment variables).
     *   **Other Configuration:**  Consider environment variables for other settings like video title, description defaults, and file paths.
+
+## Local Execution Instructions
+
+1.  **Install Node.js and npm:**
+    *   If you don't have them, download and install the latest LTS version of Node.js from [https://nodejs.org/](https://nodejs.org/).  npm is included with the Node.js installation.
+2.  **Clone the repository:**
+    ```bash
+    git clone <repository_url>  # Replace with your repository URL
+    cd agent-content-creation # Navigate to the project directory
+    ```
+3.  **Install project dependencies:**
+    ```bash
+    npm install
+    ```
+    This command will install all the necessary packages listed in the `package.json` file.
+4.  **Run the application:**
+    ```bash
+    node server.js
+    ```
+    This will start the server.  Make sure you have configured the necessary environment variables.
+5.  **Send requests to the API (using curl or Postman):**
+    *   The server will typically run on `http://localhost:3000` (or similar).  Adjust the URL if necessary.
+    *   **Example using `curl` for `/agent/update`:**
+        ```bash
+        curl -X POST -H "Content-Type: application/json" -d '{"agentId": "testAgent", "type": "text", "content": "Hello from local"}' http://localhost:3000/agent/update
+        ```
+    *   **Example using `curl` for `/agent/done`:**
+        ```bash
+        curl -X POST -H "Content-Type: application/json" -d '{"agentId": "testAgent"}' http://localhost:3000/agent/done
+        ```
+    *   Use Postman or another API testing tool to send similar requests.
 
 ## Usage
 
