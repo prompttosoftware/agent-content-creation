@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import './VideoGrid.css';
 import VideoCanvas from './VideoCanvas';
 import { calculateGridLayout } from './grid_layout_algorithm';
+import { getAgentContent } from './AgentContentStore';
 
 function VideoGrid({ agents }) {
   const numberOfAgents = agents.length;
@@ -17,18 +18,21 @@ function VideoGrid({ agents }) {
 
   return (
     <div className="video-grid" style={gridStyle}>
-      {agents.map((agent, index) => (
-        <div key={index} className="video-item" style={{
-          width: `${cellWidth}%`,
-          height: `${cellHeight}%`
-        }}>
-          <VideoCanvas
-            videoWidth={cellWidth * 1920 / 100}
-            videoHeight={cellHeight * 1080 / 100}
-            agentContent={agent.content}
-          />
-        </div>
-      ))}
+      {agents.map((agent, index) => {
+        const agentContent = getAgentContent(agent.id);
+        return (
+          <div key={index} className="video-item" style={{
+            width: `${cellWidth}%`,
+            height: `${cellHeight}%`
+          }}>
+            <VideoCanvas
+              videoWidth={cellWidth * 1920 / 100}
+              videoHeight={cellHeight * 1080 / 100}
+              agentContent={agentContent}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
