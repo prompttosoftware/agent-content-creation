@@ -4,12 +4,18 @@ import VideoCanvas from './VideoCanvas';
 import { calculateGridLayout } from './grid_layout_algorithm';
 import { getAgentContent } from './AgentContentStore';
 
-function VideoGrid({ agents }) {
+function VideoGrid({ agents, onAgentRemoved }) {
   const [agentContentMap, setAgentContentMap] = useState({});
+  const [gridStyle, setGridStyle] = useState({
+    rows: 1,
+    cols: 1,
+    cellWidth: 100,
+    cellHeight: 100
+  });
   const numberOfAgents = agents.length;
-  const { rows, cols, cellWidth, cellHeight } = useMemo(() => calculateGridLayout(numberOfAgents), [numberOfAgents]);
+  const { rows, cols, cellWidth, cellHeight } = useMemo(() => calculateGridLayout(numberOfAgents), [numberOfAgents, gridStyle]);
 
-  const gridStyle = {
+  const gridStyleComputed = {
     display: 'grid',
     gridTemplateRows: `repeat(${rows}, ${cellHeight}%)`,
     gridTemplateColumns: `repeat(${cols}, ${cellWidth}%)`,
@@ -27,8 +33,22 @@ function VideoGrid({ agents }) {
     setAgentContentMap(newAgentContentMap);
   }, [agents]);
 
+  useEffect(() => {
+    // Recalculate layout when an agent is removed
+    if (onAgentRemoved) {
+      const newNumberOfAgents = agents.length;
+      const newLayout = calculateGridLayout(newNumberOfAgents);
+      setGridStyle({
+        rows: newLayout.rows,
+        cols: newLayout.cols,
+        cellWidth: newLayout.cellWidth,
+        cellHeight: newLayout.cellHeight
+      });
+    }
+  }, [agents, onAgentRemoved, gridStyle]);
+
   return (
-    <div className="video-grid" style={gridStyle}>
+    <div className="video-grid" style={gridStyleComputed}>
       {agents.map((agent, index) => {
         const agentContent = agentContentMap[agent.id];
         return (
