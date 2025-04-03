@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import './VideoGrid.css';
-import AgentOverlay from './AgentOverlay';
+import VideoCanvas from './VideoCanvas';
 import { calculateGridLayout } from './grid_layout_algorithm';
 
 function VideoGrid({ agents }) {
@@ -22,10 +22,11 @@ function VideoGrid({ agents }) {
           width: `${cellWidth}%`,
           height: `${cellHeight}%`
         }}>
-          <div className="video-placeholder">
-            Video Placeholder {index + 1}
-            <AgentOverlay agent={agent} />
-          </div>
+          <VideoCanvas
+            videoWidth={cellWidth * 1920 / 100}
+            videoHeight={cellHeight * 1080 / 100}
+            agentContent={agent.content}
+          />
         </div>
       ))}
     </div>
