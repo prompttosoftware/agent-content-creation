@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
+const { removeAgentContent } = require('./src/AgentContentStore');
 const app = express();
 const port = 3000;
 
@@ -116,8 +117,7 @@ async function uploadVideo(auth, videoPath, videoTitle, videoDescription) {
       throw new Error('You do not have permission to upload videos.  Check your Google Cloud project permissions.');
     } else if (err.code === 400) {
       throw new Error('Invalid request parameters. Please check the video title and description.');
-    }
-    else {
+    } else {
       throw new Error('Failed to upload video.  Please check your video file and try again.');
     }
   }
@@ -135,7 +135,18 @@ app.post('/agent/update', (req, res) => {
 });
 
 app.post('/agent/done', (req, res) => {
-    res.json({ status: 'success' });
+    const { agentId } = req.body;
+    if (!agentId) {
+        return res.status(400).json({ error: 'agentId is required' });
+    }
+
+    try {
+        removeAgentContent(agentId);
+        res.status(200).json({ status: 'success' });
+    } catch (error) {
+        console.error('Error removing agent content:', error);
+        res.status(500).json({ error: 'Failed to remove agent content' });
+    }
 });
 
 // Example endpoint to upload a video (replace with your video details)
