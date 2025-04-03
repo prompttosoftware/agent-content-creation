@@ -3,44 +3,143 @@ import { uploadVideo } from '../youtube/upload'; // Assuming you have an upload 
 import { parseYouTubeError } from '../utils/errorHandling'; // Assuming you have an error handling utility
 import { initiateAuth, handleAuthCode, getAccessToken } from '../youtube/auth'; // Import authentication functions
 
+// Constants
+const PRIVACY_STATUSES = {
+  PUBLIC: 'public',
+  PRIVATE: 'private',
+  UNLISTED: 'unlisted',
+};
+
 /**
- * YouTubeUpload Component
- * Handles the upload of a video to YouTube.
+ * Component for uploading videos to YouTube.
+ *
+ * @param {object} props - Component props.
+ * @param {File} props.videoFile - The video file to upload.
+ * @param {object} props.metadata - Metadata for the video (title, description, privacy status).
+ * @param {function} props.handleUpload - Optional function to handle the upload process externally.
+ * @returns {JSX.Element} The YouTubeUpload component.
  */
-const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
+const YouTubeUpload = ({
+  videoFile,
+  metadata,
+  handleUpload,
+}) => {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [uploadComplete, setUploadComplete] = useState(false);
   const [videoId, setVideoId] = useState(null);
-  const [videoDataUrl, setVideoDataUrl] = useState(null); // State to store the data URL
-  const [isAuthenticating, setIsAuthenticating] = useState(false); // State to indicate authentication in progress
-  const [authenticationUrl, setAuthenticationUrl] = useState(null); // Store the authentication URL
-  const [accessToken, setAccessToken] = useState(null); // Store the access token
-
-  // State for video metadata input fields
+  const [videoDataUrl, setVideoDataUrl] = useState(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [authenticationUrl, setAuthenticationUrl] = useState(null);
+  const [accessToken, setAccessToken] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [privacyStatus, setPrivacyStatus] = useState('private'); // Default to private
+  const [privacyStatus, setPrivacyStatus] = useState(PRIVACY_STATUSES.PRIVATE);
 
+  // Effect to check for environment variables and access token on component mount
   useEffect(() => {
-    // Check for required environment variables
-    if (
-      !process.env.REACT_APP_YOUTUBE_API_KEY ||
-      !process.env.REACT_APP_YOUTUBE_CLIENT_ID ||
-      !process.env.REACT_APP_YOUTUBE_CLIENT_SECRET ||
-      !process.env.REACT_APP_YOUTUBE_REDIRECT_URI
-    ) {
-      setUploadError('Missing required environment variables for YouTube upload.');
+    const checkEnvVars = () => {
+      if (
+        !process.env.REACT_APP_YOUTUBE_API_KEY ||
+        !process.env.REACT_APP_YOUTUBE_CLIENT_ID ||
+        !process.env.REACT_APP_YOUTUBE_CLIENT_SECRET ||
+        !process.env.REACT_APP_YOUTUBE_REDIRECT_URI
+      ) {
+        setUploadError('Missing required environment variables for YouTube upload.');
+        return false;
+      }
+      return true;
+    };
+
+    if (!checkEnvVars()) {
+      return;
     }
 
-    // Check if we have an access token already.  If so, we're authenticated.
     const storedTokens = localStorage.getItem('youtube_tokens');
     if (storedTokens) {
-      setAccessToken(true); // Simplified:  assume if tokens exist, we're authenticated.
+      setAccessToken(true);
     }
   }, []);
 
-  const handleUploadClick = async () => {
+  /**
+   * Handles the authentication process with YouTube.
+   */
+  const handleAuthentication = async () => {
+    setIsAuthenticating(true);
+    setUploadError(null);
+
+    try {
+      const authUrl = initiateAuth();
+      if (!authUrl) {
+        throw new Error(
+          "Could not generate authentication URL. Check your credentials.",
+        );
+      }
+      setAuthenticationUrl(authUrl);
+      window.open(authUrl, '_blank'); // Open in a new tab or window
+    } catch (error) {
+      console.error('Authentication initiation error:', error);
+      setUploadError(parseYouTubeError(error));
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  /**
+   * Handles the authentication code callback after successful authentication.
+   *
+   * @param {string} code - The authorization code.
+   */
+  const handleAuthCodeCallback = async (code) => {
+    setIsAuthenticating(true);
+    setUploadError(null);
+
+    try {
+      await handleAuthCode(code);
+      setAccessToken(true);
+    } catch (error) {
+      console.error('Authentication code exchange error:', error);
+      setUploadError(parseYouTubeError(error));
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  // Effect to handle the auth code from the URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+
+    if (code) {
+      handleAuthCodeCallback(code);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  /**
+   * Reads the video file and returns a data URL.
+   *
+   * @param {File} file - The video file.
+   * @returns {Promise<string>} A promise that resolves with the data URL.
+   */
+  const readVideoFile = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        resolve(event.target.result);
+      };
+      reader.onerror = (error) => {
+        console.error('Error reading file:', error);
+        reject('Error reading video file.');
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  /**
+   * Uploads the video to YouTube.
+   */
+  const uploadVideoToYouTube = async () => {
     if (!videoFile) {
       setUploadError('Please select a video file.');
       return;
@@ -50,19 +149,19 @@ const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
       return;
     }
 
-    // Ensure we have an access token before uploading.
     try {
       await getAccessToken();
     } catch (authError) {
-      setUploadError(authError.message || "Authentication failed. Please try again.");
-      return; // Stop the upload process if authentication fails.
+      setUploadError(
+        authError.message || 'Authentication failed. Please try again.',
+      );
+      return;
     }
 
     setUploading(true);
     setUploadError(null);
     setUploadComplete(false);
 
-    // Prepare metadata
     const uploadMetadata = {
       title,
       description,
@@ -70,41 +169,19 @@ const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
     };
 
     try {
-      // Read the video file
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const videoDataUrl = event.target.result; // Get the data URL
-        setVideoDataUrl(videoDataUrl); // Store the data URL in state
+      const dataUrl = await readVideoFile(videoFile);
+      setVideoDataUrl(dataUrl);
 
-        // Construct upload parameters.  Adjust as needed.
-        const uploadParams = {
-          filePath: videoFile, // Keep file path, now that the data URL is stored.
-          metadata: uploadMetadata,
-        };
+      if (handleUpload) {
+        await handleUpload(videoFile, uploadMetadata);
+      }
 
-        // Call the handleUpload callback, passing the video file and metadata
-        if (handleUpload) {
-          await handleUpload(videoFile, uploadMetadata);
-        }
+      const accessToken = localStorage.getItem('youtube_access_token');
+      const uploadResponse = await uploadVideo(videoFile, dataUrl, uploadMetadata, accessToken);
 
-        // Example using the uploadVideo function (replace with your actual upload logic)
-        const accessToken = localStorage.getItem('youtube_access_token');
-
-        //The uploadVideo function is updated to accept the video file and dataURL as well as the access token.
-        const uploadResponse = await uploadVideo(videoFile, uploadDataUrl, uploadParams.metadata, accessToken);
-
-        console.log('Video ID:', uploadResponse.id);
-        setVideoId(uploadResponse.id);
-
-        setUploadComplete(true);
-      };
-      reader.onerror = (error) => {
-        console.error('Error reading file:', error);
-        setUploadError('Error reading video file.');
-      };
-
-      reader.readAsDataURL(videoFile);
-
+      console.log('Video ID:', uploadResponse.id);
+      setVideoId(uploadResponse.id);
+      setUploadComplete(true);
     } catch (error) {
       console.error('Upload error:', error);
       setUploadError(parseYouTubeError(error));
@@ -112,69 +189,6 @@ const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
       setUploading(false);
     }
   };
-
-  const handleAuthentication = async () => {
-    setIsAuthenticating(true);
-    setUploadError(null);
-
-    try {
-      // 1. Initiate authentication and get the URL
-      const authUrl = initiateAuth();
-      if (!authUrl) {
-        throw new Error("Could not generate authentication URL.  Check your credentials.");
-      }
-      setAuthenticationUrl(authUrl);
-      // 2. Redirect the user to the authentication URL (in a new tab/window, or using a modal)
-      // This part depends on how you want to handle the user flow.  For now, we'll just show the URL.
-      console.log("Please authenticate with YouTube:", authUrl);
-      //Consider opening the authUrl in a new tab.
-      window.open(authUrl, "_blank");
-
-    } catch (error) {
-      console.error('Authentication initiation error:', error);
-      setUploadError(parseYouTubeError(error));
-    } finally {
-      setIsAuthenticating(false);
-    }
-  };
-
-  // Function to handle the authentication code (from the redirect)
-  const handleAuthCodeCallback = async (code) => {
-    setIsAuthenticating(true);
-    setUploadError(null);
-
-    try {
-      // Exchange the authorization code for tokens
-      await handleAuthCode(code);
-
-      // Indicate successful authentication
-      setAccessToken(true);  // Set to true to indicate the user is authenticated.
-    } catch (error) {
-      console.error('Authentication code exchange error:', error);
-      setUploadError(parseYouTubeError(error));
-    } finally {
-      setIsAuthenticating(false);
-    }
-  };
-
-  // Placeholder for handling the redirect from YouTube (e.g., after the user authenticates)
-  useEffect(() => {
-    // This part assumes you have a way to get the authorization code from the URL
-    // For example, you might be using a library like `useSearchParams` or similar.
-    // In a real application, you would extract the code from the URL parameters after the user is redirected back.
-    // For this example, we'll simulate getting the code from the URL.
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-
-    if (code) {
-      // Handle the authentication code
-      handleAuthCodeCallback(code);
-
-      // Optionally, remove the code from the URL to prevent it from being processed again.
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []); // Run only on component mount
 
   if (uploadError) {
     return <p style={{ color: 'red' }}>Error: {uploadError}</p>;
@@ -186,57 +200,61 @@ const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
     !process.env.REACT_APP_YOUTUBE_CLIENT_SECRET ||
     !process.env.REACT_APP_YOUTUBE_REDIRECT_URI
   ) {
-    return <p style={{ color: 'red' }}>Missing required environment variables for YouTube upload.</p>;
+    return (
+      <p style={{ color: 'red' }}>
+        Missing required environment variables for YouTube upload.
+      </p>
+    );
   }
 
   return (
     <div>
-      {/* Authentication Button */}
-      {!accessToken ? ( // Show the button only if not authenticated
+      {!accessToken && (
         <button onClick={handleAuthentication} disabled={isAuthenticating}>
           {isAuthenticating ? 'Authenticating...' : 'Authenticate with YouTube'}
         </button>
-      ) : (
-          <p style={{ color: 'green' }}>Authenticated with YouTube!</p> // Show a message if authenticated.
       )}
 
-      {/* Video Metadata Input Fields */}
+      {accessToken && (
+        <p style={{ color: 'green' }}>Authenticated with YouTube!</p>
+      )}
+
       <div>
-        <label htmlFor="title">Title:</label>
+        <label htmlFor='title'>Title:</label>
         <input
-          type="text"
-          id="title"
+          type='text'
+          id='title'
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
       </div>
       <div>
-        <label htmlFor="description">Description:</label>
+        <label htmlFor='description'>Description:</label>
         <textarea
-          id="description"
+          id='description'
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
       <div>
-        <label htmlFor="privacy">Privacy:</label>
+        <label htmlFor='privacy'>Privacy:</label>
         <select
-          id="privacy"
+          id='privacy'
           value={privacyStatus}
           onChange={(e) => setPrivacyStatus(e.target.value)}
         >
-          <option value="public">Public</option>
-          <option value="private">Private</option>
-          <option value="unlisted">Unlisted</option>
+          <option value={PRIVACY_STATUSES.PUBLIC}>Public</option>
+          <option value={PRIVACY_STATUSES.PRIVATE}>Private</option>
+          <option value={PRIVACY_STATUSES.UNLISTED}>Unlisted</option>
         </select>
       </div>
 
-
-      <button onClick={handleUploadClick} disabled={uploading || !accessToken}> {/* Disable if not authenticated */}
+      <button onClick={uploadVideoToYouTube} disabled={uploading || !accessToken}>
         {uploading ? 'Uploading...' : 'Upload to YouTube'}
       </button>
+
       {uploadComplete && (
-          <p style={{ color: 'green' }}>Upload complete! Video ID: {videoId}</p>
+        <p style={{ color: 'green' }}>Upload complete! Video ID: {videoId}</p>
       )}
     </div>
   );
