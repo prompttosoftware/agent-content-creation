@@ -1,24 +1,57 @@
-// server.test.js
 const request = require('supertest');
-const express = require('express');
-const bodyParser = require('body-parser');
-const app = require('./server'); // Assuming server.js exports the app
+const { app, startServer, stopServer } = require('../server');
 
-app.use(bodyParser.json());
+describe('API Endpoints', () => {
+  let server;
 
-describe('Agent Update Endpoint', () => {
-  it('should log the received data and return 200 OK', async () => {
-    const agentId = 'agent-123';
-    const type = 'text';
-    const content = 'This is some content';
+  beforeAll(async () => {
+    server = await startServer();
+  }, 10000);
 
-    const response = await request(app)
-      .post('/agent/update')
-      .send({ agentId, type, content })
-      .expect(200);
+  afterAll(async () => {
+    await stopServer();
+  }, 10000);
 
-    // Add assertions to check the console output (this is tricky without mocking console.log directly)
-    // For now, we just check the status code.
-    expect(response.text).toBe('OK');
-  });
+  it('GET /api/hello should return a message', async () => {
+    const res = await request(app).get('/api/hello');
+    expect(res.statusCode).toEqual(200);
+    expect(res.body).toHaveProperty('message');
+  }, 10000);
+
+  it('POST /agent/update should return success with valid content', async () => {
+    const res = await request(app).post('/agent/update').send({ content: 'test content' });
+    expect(res.statusCode).toEqual(200);
+    expect(res.body).toHaveProperty('success', true);
+  }, 10000);
+
+  it('POST /agent/update should return 400 if content is missing', async () => {
+    const res = await request(app).post('/agent/update').send({});
+    expect(res.statusCode).toEqual(400);
+  }, 10000);
+
+  it('POST /agent/update should return 400 if content is not a string', async () => {
+    const res = await request(app).post('/agent/update').send({ content: 123 });
+    expect(res.statusCode).toEqual(400);
+  }, 10000);
+
+    it('POST /agent/update should return 400 if content is an empty string', async () => {
+        const res = await request(app).post('/agent/update').send({ content: '' });
+        expect(res.statusCode).toEqual(400);
+    }, 10000);
+
+  it('POST /agent/done should return success', async () => {
+    const res = await request(app).post('/agent/done');
+    expect(res.statusCode).toEqual(200);
+    expect(res.body).toHaveProperty('success', true);
+  }, 10000);
+
+    it('POST /agent/update should return 500 on server error', async () => {
+        // Mock the agentContentStorage to throw an error
+        jest.mock('../AgentContentStorage', () => ({
+            updateContent: jest.fn().mockRejectedValue(new Error('Simulated server error')),
+        }));
+        const res = await request(app).post('/agent/update').send({ content: 'test content' });
+        expect(res.statusCode).toEqual(500);
+    }, 15000);
+
 });
