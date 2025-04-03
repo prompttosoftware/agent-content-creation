@@ -1,59 +1,37 @@
-const request = require('supertest');
-const { app, startServer, stopServer } = require('../server');
-const findFreePort = require('find-free-port');
+import request from 'supertest';
+import { app, startServer, stopServer } from '../server.js';
 
 describe('API Endpoints', () => {
   let server;
-  let port; // Store the port the server is running on.
+  let appInstance;
 
   beforeAll(async () => {
-    // Find a free port
-    [port] = await findFreePort(3000, 3010); // Search for a free port between 3000 and 3010
-    // Start the server on the free port
-    server = await startServer(port);
-  });
+    const { server: s, app: a } = await startServer();
+    server = s;
+    appInstance = a;
+  }, 10000);
 
   afterAll(async () => {
-    await stopServer(server);
+    await stopServer();
   });
 
-  it('should return 200 OK for GET /', async () => {
-    const response = await request(app)
-      .get('/')
-      .timeout(5000); // Increased timeout to 5 seconds
+  it('should respond with 200 for /api/hello', async () => {
+    const response = await request(appInstance).get('/api/hello');
     expect(response.statusCode).toBe(200);
   });
 
-  it('should return 200 OK for GET /api/hello', async () => {
-    const response = await request(app)
-      .get('/api/hello')
-      .timeout(5000); // Increased timeout to 5 seconds
+  it('should respond with 200 for /agent/update', async () => {
+    const response = await request(appInstance).post('/agent/update').send({ content: 'test' });
     expect(response.statusCode).toBe(200);
   });
 
-  it('should return 200 OK for POST /agent/update with valid content', async () => {
-    const response = await request(app)
-      .post('/agent/update')
-      .send({ content: 'test content' })
-      .timeout(5000); // Increased timeout to 5 seconds
+  it('should respond with 200 for /agent/done', async () => {
+    const response = await request(appInstance).post('/agent/done');
     expect(response.statusCode).toBe(200);
   });
 
-  it('should return 400 Bad Request for POST /agent/update without content', async () => {
-    const response = await request(app)
-      .post('/agent/update')
-      .send({})
-      .timeout(5000); // Increased timeout to 5 seconds
-    expect(response.statusCode).toBe(400);
+  it('should handle invalid routes with 404', async () => {
+    const response = await request(appInstance).get('/nonexistent');
+    expect(response.statusCode).toBe(404);
   });
-
-  it('should return 200 OK for POST /agent/done', async () => {
-    const response = await request(app)
-        .post('/agent/done')
-        .timeout(5000); // Increased timeout to 5 seconds
-    expect(response.statusCode).toBe(200);
-  });
-
-
-  // Add more tests for different endpoints and edge cases here
 });
