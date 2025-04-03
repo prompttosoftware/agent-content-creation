@@ -1,8 +1,8 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import VideoGrid from './VideoGrid';
 import VideoCanvas from './VideoCanvas';
-import { calculateGridLayout, getAgentContent } from './grid_layout_algorithm';
+import { calculateGridLayout, getAgentContent } from './AgentContentStore';
 import '@testing-library/jest-dom';
 
 jest.mock('./grid_layout_algorithm');
@@ -97,4 +97,18 @@ describe('VideoGrid Component', () => {
 
     });
 
+    it('re-renders correctly after agent removal', async () => {
+        const mockAgents = [
+            { id: 'agent1', name: 'Agent 1' },
+            { id: 'agent2', name: 'Agent 2' }
+        ];
+        const { rerender } = render(<VideoGrid agents={mockAgents} />);
+        expect(screen.getAllByTestId('video-item').length).toBe(2);
+
+        const updatedAgents = [{ id: 'agent1', name: 'Agent 1' }];
+        await act(() => {
+            rerender(<VideoGrid agents={updatedAgents} />);
+        });
+        expect(screen.getAllByTestId('video-item').length).toBe(1);
+    });
 });
