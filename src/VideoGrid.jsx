@@ -1,26 +1,19 @@
-// VideoGrid.jsx
 import React from 'react';
 import './VideoGrid.css';
 import AgentOverlay from './AgentOverlay';
 
-function VideoGrid({ videos, agentData }) {
+function VideoGrid({ agents }) {
   return (
-    <div className="video-grid-container">
-      {videos.map((video, index) => {
-        const agentContent = agentData && agentData[index];
-
-        return (
-          <div key={index} className="video-item">
-            <video src={video.src} controls />
-            <p>{video.title}</p>
-            <AgentOverlay
-              videoWidth="100%" // Use percentage for dynamic sizing
-              videoHeight="100%" // Use percentage for dynamic sizing
-              agentContent={agentContent}
-            />
+    <div className="video-grid">
+      {agents.map((agent, index) => (
+        <div key={index} className="video-item">
+          {/* Placeholder for video stream or canvas */}
+          <div className="video-placeholder">
+            Video Placeholder {index + 1}
+            <AgentOverlay agent={agent} />
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
