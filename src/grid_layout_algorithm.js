@@ -2,35 +2,49 @@
 
 /**
  * Calculates the grid layout for video agents based on the number of agents.
+ * It aims for a square or near-square grid arrangement.
  *
- * @param {number} numberOfAgents The number of active video agents.
+ * @param {number} numberOfAgents The number of active video agents (must be a non-negative integer).
  * @returns {object} An object containing the grid layout information:
  *   - rows: The number of rows in the grid.
  *   - cols: The number of columns in the grid.
- *   - cellWidth: The width of each cell in pixels (or relative units, e.g., percentages).  This is designed to maintain a square or near-square aspect ratio.
- *   - cellHeight: The height of each cell in pixels (or relative units).
+ *   - cellWidth: The width of each cell, expressed as a percentage of the container width (0-100).
+ *   - cellHeight: The height of each cell, expressed as a percentage of the container height (0-100).
+ *   Returns null if the input is invalid (e.g., not a number, negative).
  */
 function calculateGridLayout(numberOfAgents) {
+  // Input validation.  Return null for invalid input.
+  if (typeof numberOfAgents !== 'number' || !Number.isInteger(numberOfAgents) || numberOfAgents < 0) {
+    console.error("Invalid input: numberOfAgents must be a non-negative integer.");
+    return null;
+  }
+
   let rows, cols, cellWidth, cellHeight;
 
   switch (numberOfAgents) {
+    case 0: //Handle the zero case gracefully.
+      rows = 1;
+      cols = 1;
+      cellWidth = 100;
+      cellHeight = 100;
+      break;
     case 1:
       rows = 1;
       cols = 1;
-      cellWidth = 100; // Assuming 100% of the container width
-      cellHeight = 100; // Assuming 100% of the container height
+      cellWidth = 100;
+      cellHeight = 100;
       break;
     case 2:
       rows = 1;
       cols = 2;
-      cellWidth = 50; // Half the width for two columns
+      cellWidth = 50;
       cellHeight = 100;
       break;
     case 3:
       rows = 2;
-      cols = 2; // Optimized for 3.  2x2, with one empty spot.  More space efficient than 1x3 or 3x1.
+      cols = 2;
       cellWidth = 50;
-      cellHeight = 50; // Approximating square
+      cellHeight = 50;
       break;
     case 4:
       rows = 2;
@@ -41,8 +55,8 @@ function calculateGridLayout(numberOfAgents) {
     case 5:
       rows = 2;
       cols = 3;
-      cellWidth = 33.3333; // Approximate third of the container width
-      cellHeight = 50;  // Approx. half the container height
+      cellWidth = 33.3333;
+      cellHeight = 50;
       break;
     case 6:
       rows = 2;
@@ -88,23 +102,24 @@ function calculateGridLayout(numberOfAgents) {
       break;
 
     default:
-      // For more than 12 agents, try to maintain near-square cells.
-      // Determine the optimal number of rows and columns that are close to each other
+      // For more than 12 agents, calculate rows and columns to approach a square grid.
       const sqrt = Math.sqrt(numberOfAgents);
       rows = Math.floor(sqrt);
-      cols = Math.ceil(numberOfAgents / rows); // Ensure all agents are displayed
-      if (rows * (cols -1) >= numberOfAgents ) {
+      cols = Math.ceil(numberOfAgents / rows);
+
+      // Adjust to minimize the difference between rows and columns while ensuring all agents fit.
+      if (rows * (cols - 1) >= numberOfAgents) {
           cols--;
       }
-      if (rows * cols < numberOfAgents) {
-          rows++;
-          cols = Math.ceil(numberOfAgents / rows);
-      }
-      if (rows > cols) {
-          const temp = rows;
-          rows = cols;
-          cols = temp;
-      }
+       if (rows * cols < numberOfAgents) {
+           rows++;
+           cols = Math.ceil(numberOfAgents / rows);
+       }
+
+      // Ensure rows <= cols to avoid unnecessary swapping and maintain predictable behavior.
+       if (rows > cols) {
+          [rows, cols] = [cols, rows]; // Swap if rows > cols
+       }
 
       cellWidth = 100 / cols;
       cellHeight = 100 / rows;
@@ -118,16 +133,3 @@ function calculateGridLayout(numberOfAgents) {
     cellHeight: cellHeight,
   };
 }
-
-// Example usage:
-// const layout = calculateGridLayout(7);
-// console.log(layout); // { rows: 3, cols: 3, cellWidth: 33.3333, cellHeight: 33.3333 }
-
-// const layout1 = calculateGridLayout(1);
-// console.log(layout1); // { rows: 1, cols: 1, cellWidth: 100, cellHeight: 100 }
-
-// const layout2 = calculateGridLayout(15);
-// console.log(layout2); // Example result for 15:  rows: 4, cols: 4, cellWidth: 25, cellHeight: 25
-
-// const layout3 = calculateGridLayout(16);
-// console.log(layout3); // rows: 4, cols: 4, cellWidth: 25, cellHeight: 25
