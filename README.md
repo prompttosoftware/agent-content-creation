@@ -1,4 +1,3 @@
-```markdown
 # Agent-Content-Creation: Node.js YouTube Video Creation App
 
 ## Description
@@ -144,4 +143,3 @@ Contributions are welcome!  Please follow these guidelines:
 ## License
 
 (Specify the license for your project here, e.g., MIT License).
-```
