@@ -14,7 +14,7 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "^5.0.1"
+    "react-scripts": "^3.0.1"
   },
   "browserslist": {
     "production": [
@@ -31,6 +31,7 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
+    "canvas": "^2.11.2",
     "jest": "^27.5.1"
   }
 }
