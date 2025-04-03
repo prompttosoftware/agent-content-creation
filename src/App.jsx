@@ -1,45 +1,37 @@
-// App.jsx
+// src/App.js
 import React, { useState, useEffect } from 'react';
-import './App.css';
 import VideoGrid from './VideoGrid';
-import { getAgentContent, removeAgentContent } from './AgentContentStore';
 
 function App() {
   const [agents, setAgents] = useState([]);
-  const [initialized, setInitialized] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initializeGrid = async () => {
-      // Fetch initial agent data (example - replace with actual data fetching)
-      // Assuming agent data is fetched and an array of agent objects is returned
-      // Each agent object should have an 'id' property.
-      // Example: [{id: 'agent1', ...}, {id: 'agent2', ...}]
-      // Replace this with your actual data fetching logic
-      const initialAgents =  [
-        { id: 'agent1' },
-        { id: 'agent2' },
+    // Simulate fetching agents (replace with actual API call)
+    const fetchAgents = async () => {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate loading
+      const mockAgents = [
+        { id: 'agent1', name: 'Agent One' },
+        { id: 'agent2', name: 'Agent Two' },
       ];
-
-      setAgents(initialAgents);
-      setInitialized(true);
+      setAgents(mockAgents);
+      setLoading(false);
     };
 
-    if (!initialized) {
-      initializeGrid();
-    }
-  }, [initialized]);
+    fetchAgents();
+  }, []);
 
-  const handleAgentRemoved = (agentId) => {
-    // Handle the removal of an agent.  This should
-    // remove the agent from the agents array.
-      setAgents(prevAgents => prevAgents.filter(agent => agent.id !== agentId));
-      removeAgentContent(agentId);
+  const removeAgent = (agentId) => {
+    setAgents(prevAgents => prevAgents.filter(agent => agent.id !== agentId));
   };
 
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
   return (
-    <div className="App">
-      {initialized && <VideoGrid agents={agents} onAgentRemoved={handleAgentRemoved} />}
-      {!initialized && <p>Loading...</p>}
+    <div data-testid="app-container">
+      <VideoGrid agents={agents} removeAgent={removeAgent} />
     </div>
   );
 }

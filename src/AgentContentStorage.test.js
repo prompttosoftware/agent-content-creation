@@ -1,4 +1,4 @@
-import AgentContentStorage from './AgentContentStorage';
+import AgentContentStorage from './AgentContentStorage.js';
 
 describe('AgentContentStorage', () => {
   it('should pass a test', () => {

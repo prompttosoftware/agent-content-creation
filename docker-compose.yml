@@ -1,0 +1,13 @@
+version: "3.8"
+services:
+  agent-content-creation:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/usr/src/agent-content-creation  # Mount the current directory
+    user: "1000:1000"  # User and group ID inside the container (adjust if necessary)
+    environment:
+      - NODE_ENV=development
+    stdin_open: true
+    tty: true
