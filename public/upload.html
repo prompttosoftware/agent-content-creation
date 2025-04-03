@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Upload</title>
+</head>
+<body>
+    <h1>Upload Video to YouTube</h1>
+
+    <form action="/upload" method="post" enctype="multipart/form-data">
+        <label for="video">Select video:</label><br>
+        <input type="file" id="video" name="video" accept="video/*"><br><br>
+
+        <label for="title">Title:</label><br>
+        <input type="text" id="title" name="title"><br><br>
+
+        <label for="description">Description:</label><br>
+        <textarea id="description" name="description"></textarea><br><br>
+
+        <label for="categoryId">Category ID (optional):</label><br>
+        <input type="text" id="categoryId" name="categoryId"><br><br>
+
+        <label for="privacyStatus">Privacy Status (optional - public, private, unlisted):</label><br>
+        <input type="text" id="privacyStatus" name="privacyStatus"><br><br>
+
+        <label for="tags">Tags (comma separated - optional):</label><br>
+        <input type="text" id="tags" name="tags"><br><br>
+
+        <input type="submit" value="Upload">
+    </form>
+
+    <br>
+    <a href="/auth/google">Sign in with Google</a>
+    <br>
+    <p>Test Video: <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank">Test Video</a></p>
+</body>
+</html>
