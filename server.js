@@ -1,14 +1,21 @@
+// server.js
 const express = require('express');
+const bodyParser = require('body-parser');
+
 const app = express();
 const port = 3000;
 
-// Middleware to parse JSON request bodies
-app.use(express.json());
+app.use(bodyParser.json());
 
-app.get('/', (req, res) => {
-  res.send('Hello World!');
+app.post('/agent/update', (req, res) => {
+  const { agentId, type, content } = req.body;
+  console.log('Received agent update:');
+  console.log('  agentId:', agentId);
+  console.log('  type:', type);
+  console.log('  content:', content);
+  res.status(200).send('OK');
 });
 
 app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+  console.log(`Server listening at http://localhost:${port}`);
 });
