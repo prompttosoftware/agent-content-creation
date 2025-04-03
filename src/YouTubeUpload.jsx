@@ -1,312 +1,270 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { google } from 'googleapis';
-
-const CLIENT_ID = process.env.REACT_APP_YOUTUBE_CLIENT_ID; // Get from .env
-const CLIENT_SECRET = process.env.REACT_APP_YOUTUBE_CLIENT_SECRET; // Get from .env
-const REDIRECT_URI = process.env.REACT_APP_YOUTUBE_REDIRECT_URI; // Get from .env (e.g., http://localhost:3000/oauth2callback)
-const SCOPES = [
-  'https://www.googleapis.com/auth/youtube.upload',
-  'https://www.googleapis.com/auth/youtube',
-];
+import { initiateAuth, handleAuthCode, refreshAccessToken, authenticate } from '../youtube/auth';
+import { uploadVideo } from '../youtube/upload';
+import { parseYouTubeError } from '../utils/errorHandling';
 
 /**
  * YouTubeUpload Component
  * Handles authentication, video details input, file upload, and progress display.
  */
 const YouTubeUpload = () => {
-  const [accessToken, setAccessToken] = useState(null);
-  const [videoFile, setVideoFile] = useState(null);
-  const [videoDetails, setVideoDetails] = useState({
-    title: '',
-    description: '',
-    category: '22', // Default to People & Blogs
-    privacyStatus: 'private',
-  });
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const [uploadComplete, setUploadComplete] = useState(false);
-  const [uploadError, setUploadError] = useState(null);
-  const fileInputRef = useRef(null);
-
-
-  // --- Authentication ---
-
-  /**
-   *  Initiates the OAuth flow to get an access token.
-   */
-  const handleAuthClick = async () => {
-    const oauth2Client = new google.auth.OAuth2(
-      CLIENT_ID,
-      CLIENT_SECRET,
-      REDIRECT_URI
-    );
-
-    const authUrl = oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      scope: SCOPES,
+    const [accessToken, setAccessToken] = useState(null);
+    const [refreshToken, setRefreshToken] = useState(null); // Store the refresh token
+    const [videoFile, setVideoFile] = useState(null);
+    const [videoDetails, setVideoDetails] = useState({
+        title: '',
+        description: '',
+        category: '22', // Default to People & Blogs
+        privacyStatus: 'private',
     });
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploading, setUploading] = useState(false);
+    const [uploadComplete, setUploadComplete] = useState(false);
+    const [uploadError, setUploadError] = useState(null);
+    const [videoId, setVideoId] = useState(null);
+    const fileInputRef = useRef(null);
 
-    // Redirect the user to the authentication URL
-    window.location.href = authUrl; // Or open in a new window/tab
+    // --- Authentication ---
 
-  };
+    useEffect(() => {
+        const loadTokens = async () => {
+            try {
+                const storedTokens = JSON.parse(localStorage.getItem('youtube_tokens'));
+                if (storedTokens?.access_token) {
+                    setAccessToken(storedTokens.access_token);
+                }
+                if (storedTokens?.refresh_token) {
+                    setRefreshToken(storedTokens.refresh_token);
+                }
+            } catch (error) {
+                console.error("Error loading tokens from localStorage:", error);
+            }
+        };
 
+        loadTokens();
 
-  useEffect(() => {
-    // Handle OAuth Callback - This runs when the app redirects back after OAuth
-    const handleOAuthCallback = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
+        // Handle OAuth Callback - This runs when the app redirects back after OAuth
+        const handleOAuthCallback = async () => {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
 
-      if (code) {
+            if (code) {
+                try {
+                    const tokens = await handleAuthCode(code); // Use the auth function.
+                    setAccessToken(tokens.access_token);
+                    setRefreshToken(tokens.refresh_token);
+                    // Store tokens in local storage
+                    localStorage.setItem('youtube_tokens', JSON.stringify(tokens));
+
+                    // Clear the URL params to avoid re-running this logic on refresh
+                    window.history.replaceState({}, document.title, window.location.pathname);
+
+                } catch (error) {
+                    console.error('Error exchanging authorization code for tokens:', error);
+                    setUploadError(parseYouTubeError(error));  // Use error handling
+                }
+            }
+        };
+
+        handleOAuthCallback(); // Check for and handle the OAuth code
+
+    }, []);
+
+    useEffect(() => {
+        const refresh = async () => {
+            if (refreshToken && accessToken) {
+                try {
+                    const newAccessToken = await refreshAccessToken(refreshToken);
+                    setAccessToken(newAccessToken);
+                    console.log("Access token refreshed successfully.");
+                } catch (error) {
+                    console.error("Failed to refresh access token:", error);
+                    // Handle refresh token failure (e.g., clear tokens and re-authenticate)
+                    localStorage.removeItem('youtube_tokens');
+                    setAccessToken(null);
+                    setRefreshToken(null);
+                    setUploadError("Session expired. Please re-authenticate.");
+                }
+            }
+        };
+
+        // Refresh the token every hour (3600 seconds) - adjust as needed.
+        const intervalId = setInterval(refresh, 3600 * 1000);
+
+        return () => clearInterval(intervalId);
+    }, [refreshToken, accessToken]);
+
+    /**
+     *  Initiates the OAuth flow to get an access token.
+     */
+    const handleAuthClick = async () => {
         try {
-          const oauth2Client = new google.auth.OAuth2(
-            CLIENT_ID,
-            CLIENT_SECRET,
-            REDIRECT_URI
-          );
-
-          const { tokens } = await oauth2Client.getToken(code);
-          oauth2Client.setCredentials(tokens); // Store credentials
-          setAccessToken(tokens.access_token);
-          // You might want to store the refresh token as well, for future use.
-
-          // Clear the URL params to avoid re-running this logic on refresh
-          window.history.replaceState({}, document.title, window.location.pathname);
-
+            const authUrl = initiateAuth();
+            if (authUrl) {
+                window.location.href = authUrl;
+            } else {
+                setUploadError("Could not generate authorization URL.  Please check your configuration.");
+            }
         } catch (error) {
-          console.error('Error exchanging authorization code for tokens:', error);
-          setUploadError('Authentication failed. Please try again.');
+            setUploadError(parseYouTubeError(error));
         }
-      }
     };
 
-    handleOAuthCallback(); // Check for and handle the OAuth code
 
-  }, []);
+    // --- Video Details Handlers ---
 
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setVideoDetails({ ...videoDetails, [name]: value });
+    };
 
-
-  // --- Video Details Handlers ---
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setVideoDetails({ ...videoDetails, [name]: value });
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    setVideoFile(file);
-  };
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        setVideoFile(file);
+    };
 
 
-  // --- Upload Functionality ---
+    // --- Upload Functionality ---
 
-  /**
-   *  Uploads the video to YouTube.
-   */
-  const handleUpload = async () => {
-    if (!accessToken) {
-      setUploadError('Please authenticate with YouTube first.');
-      return;
-    }
+    /**
+     *  Uploads the video to YouTube.
+     */
+    const handleUpload = async () => {
+        if (!accessToken) {
+            setUploadError('Please authenticate with YouTube first.');
+            return;
+        }
 
-    if (!videoFile) {
-      setUploadError('Please select a video file.');
-      return;
-    }
+        if (!videoFile) {
+            setUploadError('Please select a video file.');
+            return;
+        }
 
-    setUploading(true);
-    setUploadComplete(false);
-    setUploadError(null);
-    setUploadProgress(0);
+        setUploading(true);
+        setUploadComplete(false);
+        setUploadError(null);
+        setUploadProgress(0);
 
-
-    try {
-        const youtube = google.youtube({
-            version: 'v3',
-            auth: accessToken
-        });
-
-
-        const res = await youtube.videos.insert(
-            {
-                part: 'snippet,status',
-                requestBody: {
-                    snippet: {
-                        title: videoDetails.title,
-                        description: videoDetails.description,
-                        categoryId: videoDetails.category,
-                    },
-                    status: {
-                        privacyStatus: videoDetails.privacyStatus,
-                    },
-                },
-                media: {
-                    mimeType: videoFile.type,
-                    body:  createReadableStream(videoFile),  // Pass a readable stream
-                },
-            },
-            {
-                onUploadProgress: (evt) => {
-                    const progress = parseInt((evt.bytesTransferred / videoFile.size) * 100, 10);
-                    setUploadProgress(progress);
-                },
-            }
-        );
-
-
-        if (res.status === 200) {
+        try {
+            // Use the uploadVideo function from the upload.js file.
+            const videoId = await uploadVideo( 
+                videoFile, // Pass the file object
+                videoDetails,
+                accessToken,
+            );
+            console.log('Video uploaded successfully! Video ID:', videoId);
+            setVideoId(videoId);
             setUploadComplete(true);
-            // Optionally, store the video ID for future use.
-            console.log('Video uploaded successfully! Video ID:', res.data.id);
-        } else {
-            throw new Error(`Upload failed: ${res.status} - ${res.statusText}`);
+        } catch (error) {
+            console.error('Upload error:', error);
+            setUploadError(parseYouTubeError(error)); // Use error handling
+        } finally {
+            setUploading(false);
         }
-
-    } catch (error) {
-        console.error('Upload error:', error);
-        let errorMessage = 'Upload failed. Please try again.';
-
-        if (error.response && error.response.data && error.response.data.error) {
-          errorMessage = error.response.data.error.message; // Get the error message from the API
-        }
-
-        setUploadError(errorMessage);
-    } finally {
-        setUploading(false);
-    }
-  };
-
-
-  // Helper to create a readable stream (important for large files)
-  const createReadableStream = (file) => {
-    const reader = new FileReader();
-    const chunkSize = 1024 * 1024 * 5; // 5MB chunks
-    let offset = 0;
-
-    return new ReadableStream({
-      start(controller) {
-        function push() {
-          const slice = file.slice(offset, offset + chunkSize);
-          reader.readAsArrayBuffer(slice);
-        }
-
-        reader.onload = () => {
-          const buffer = reader.result;
-          controller.enqueue(new Uint8Array(buffer));
-          offset += buffer.byteLength;
-          if (offset < file.size) {
-            push();
-          } else {
-            controller.close();
-          }
-        };
-        reader.onerror = (error) => {
-          controller.error(error);
-        };
-
-        push();
-      },
-    });
-  };
+    };
 
 
 
+    // --- UI Rendering ---
 
-  // --- UI Rendering ---
-
-  return (
-    <div>
-      <h2>YouTube Video Upload</h2>
-
-      {!accessToken ? (
-        <button onClick={handleAuthClick}>Authenticate with YouTube</button>
-      ) : (
+    return (
         <div>
-          <p>Authenticated with YouTube.</p>
+            <h2>YouTube Video Upload</h2>
 
-          {uploadError && <p style={{ color: 'red' }}>Error: {uploadError}</p>}
+            {!accessToken ? (
+                <button onClick={handleAuthClick}>Authenticate with YouTube</button>
+            ) : (
+                <div>
+                    <p>Authenticated with YouTube.</p>
 
-          <form>
-            <div>
-              <label htmlFor="title">Title:</label>
-              <input
-                type="text"
-                id="title"
-                name="title"
-                value={videoDetails.title}
-                onChange={handleInputChange}
-              />
-            </div>
+                    {uploadError && <p style={{ color: 'red' }}>Error: {uploadError}</p>}
 
-            <div>
-              <label htmlFor="description">Description:</label>
-              <textarea
-                id="description"
-                name="description"
-                value={videoDetails.description}
-                onChange={handleInputChange}
-              />
-            </div>
+                    <form>
+                        <div>
+                            <label htmlFor="title">Title:</label>
+                            <input
+                                type="text"
+                                id="title"
+                                name="title"
+                                value={videoDetails.title}
+                                onChange={handleInputChange}
+                            />
+                        </div>
 
-            <div>
-              <label htmlFor="category">Category:</label>
-              <select
-                id="category"
-                name="category"
-                value={videoDetails.category}
-                onChange={handleInputChange}
-              >
-                {/* Add more category options as needed */}
-                <option value="22">People & Blogs</option>
-                <option value="27">Education</option>
-                <option value="10">Music</option>
-              </select>
-            </div>
+                        <div>
+                            <label htmlFor="description">Description:</label>
+                            <textarea
+                                id="description"
+                                name="description"
+                                value={videoDetails.description}
+                                onChange={handleInputChange}
+                            />
+                        </div>
 
-            <div>
-              <label htmlFor="privacyStatus">Privacy:</label>
-              <select
-                id="privacyStatus"
-                name="privacyStatus"
-                value={videoDetails.privacyStatus}
-                onChange={handleInputChange}
-              >
-                <option value="private">Private</option>
-                <option value="public">Public</option>
-                <option value="unlisted">Unlisted</option>
-              </select>
-            </div>
+                        <div>
+                            <label htmlFor="category">Category:</label>
+                            <select
+                                id="category"
+                                name="category"
+                                value={videoDetails.category}
+                                onChange={handleInputChange}
+                            >
+                                {/* Add more category options as needed */}
+                                <option value="22">People & Blogs</option>
+                                <option value="27">Education</option>
+                                <option value="10">Music</option>
+                            </select>
+                        </div>
 
-            <div>
-              <label htmlFor="videoFile">Choose Video:</label>
-              <input
-                type="file"
-                id="videoFile"
-                accept="video/*"
-                onChange={handleFileChange}
-                ref={fileInputRef}
-              />
-            </div>
+                        <div>
+                            <label htmlFor="privacyStatus">Privacy:</label>
+                            <select
+                                id="privacyStatus"
+                                name="privacyStatus"
+                                value={videoDetails.privacyStatus}
+                                onChange={handleInputChange}
+                            >
+                                <option value="private">Private</option>
+                                <option value="public">Public</option>
+                                <option value="unlisted">Unlisted</option>
+                            </select>
+                        </div>
 
-            {uploading && (
-              <div>
-                <p>Uploading... {uploadProgress}%</p>
-                <progress value={uploadProgress} max="100" />
-              </div>
+                        <div>
+                            <label htmlFor="videoFile">Choose Video:</label>
+                            <input
+                                type="file"
+                                id="videoFile"
+                                accept="video/*"
+                                onChange={handleFileChange}
+                                ref={fileInputRef}
+                            />
+                        </div>
+
+                        {uploading && (
+                            <div>
+                                <p>Uploading... {uploadProgress}%</p>
+                                <progress value={uploadProgress} max="100" />
+                            </div>
+                        )}
+
+                        {uploadComplete && (
+                            <div>
+                                <p style={{ color: 'green' }}>Upload complete!</p>
+                                {videoId && (
+                                    <p>Video ID: <a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noopener noreferrer">{videoId}</a></p>
+                                )}
+                            </div>
+                        )}
+
+                        <button type="button" onClick={handleUpload} disabled={uploading}>
+                            Upload
+                        </button>
+                    </form>
+                </div>
             )}
-
-            {uploadComplete && <p style={{ color: 'green' }}>Upload complete!</p>}
-
-            <button type="button" onClick={handleUpload} disabled={uploading}>
-              Upload
-            </button>
-          </form>
         </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default YouTubeUpload;
