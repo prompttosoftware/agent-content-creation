@@ -97,8 +97,10 @@ async function handleAuthCode(authorizationCode) {
         const oAuth2Client = getOAuth2Client();
         const { tokens } = await oAuth2Client.getToken(authorizationCode);
         oAuth2Client.setCredentials(tokens); // Set the credentials on the client.
-        // Store tokens in local storage
+
+        // Store tokens in local storage, including the refresh token
         localStorage.setItem('youtube_tokens', JSON.stringify(tokens));
+
         return tokens;
 
     } catch (error) {
@@ -119,7 +121,7 @@ async function refreshAccessToken(refreshToken) {
     try {
         const { tokens } = await oAuth2Client.refreshAccessToken();
         oAuth2Client.setCredentials(tokens); // Update credentials with the new tokens.
-        //Update tokens in local storage
+        // Update tokens in local storage
         const storedTokens = JSON.parse(localStorage.getItem('youtube_tokens'));
         const updatedTokens = { ...storedTokens, ...tokens };
         localStorage.setItem('youtube_tokens', JSON.stringify(updatedTokens));
@@ -127,6 +129,8 @@ async function refreshAccessToken(refreshToken) {
 
     } catch (error) {
         console.error("Error during token refresh:", error);
+        // Clear tokens if refresh fails.
+        localStorage.removeItem('youtube_tokens'); // Ensure tokens are cleared on refresh failure
         throw error; // Re-throw the error for handling by the caller
     }
 }
@@ -141,8 +145,8 @@ async function authenticate() {
     let tokens;
 
     try {
-        // Attempt to get stored tokens (e.g., from localStorage).  Implementation depends on how you store them.
-        const storedTokens = JSON.parse(localStorage.getItem('youtube_tokens'));  // Example
+        // Attempt to get stored tokens (e.g., from localStorage).
+        const storedTokens = JSON.parse(localStorage.getItem('youtube_tokens'));
 
         if (storedTokens && storedTokens.refresh_token) {
             // Use the refresh token to get new access token if we have them.
@@ -170,7 +174,7 @@ async function authenticate() {
         }
 
         // Return the client, now possibly authenticated.
-        return { client: oAuth2Client, tokens: tokens };
+        return { client: oAuth2Client, tokens: storedTokens };
 
     } catch (error) {
         console.error("Authentication Error:", error);
