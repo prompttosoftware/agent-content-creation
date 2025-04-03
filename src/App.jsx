@@ -1,5 +1,7 @@
+// App.jsx
 import React, { useState } from 'react';
 import VideoGrid from './VideoGrid';
+import VideoCanvas from './VideoCanvas';
 
 function App() {
   const [agents, setAgents] = useState([
@@ -12,6 +14,7 @@ function App() {
   return (
     <div className="App">
       <VideoGrid agents={agents} />
+      <VideoCanvas width={640} height={480} />
     </div>
   );
 }
