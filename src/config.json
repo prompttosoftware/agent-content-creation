@@ -1,0 +1,11 @@
+{
+  "youtube": {
+    "clientId": "YOUR_YOUTUBE_CLIENT_ID",
+    "clientSecret": "YOUR_YOUTUBE_CLIENT_SECRET",
+    "redirectUri": "YOUR_YOUTUBE_REDIRECT_URI",
+    "scopes": [
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/youtube"
+    ]
+  }
+}
