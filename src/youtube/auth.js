@@ -4,21 +4,20 @@ import { google } from 'googleapis';
 import { parseYouTubeError } from '../utils/errorHandling.js';
 import fs from 'fs';
 import path from 'path';
+import open from 'open'; // Import the 'open' package to open URLs in the browser
 
 // Authorization URL constants
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json'); // Define the path to credentials.json
 
 let oAuth2Client; // Store the OAuth2 client
+let accessToken;
 
-/**
- * Loads credentials from environment variables.
- * @returns {object | null} An object containing the YouTube client ID, client secret, redirect URI, and scopes, or null if the file is not found.
- */
-function loadCredentials() {
+function loadCredentialsFromEnv() {
     const clientId = process.env.YOUTUBE_CLIENT_ID;
     const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
     const redirectUri = process.env.YOUTUBE_REDIRECT_URI;
-    const scopes = process.env.YOUTUBE_SCOPES ? process.env.YOUTUBE_SCOPES.split(',') : null; // Allow scopes to be passed as a comma-separated string
+    const scopes = process.env.YOUTUBE_SCOPES ? process.env.YOUTUBE_SCOPES.split(',') : null;
 
     if (!clientId || !clientSecret || !redirectUri || !scopes) {
         const missingVars = [];
@@ -27,7 +26,7 @@ function loadCredentials() {
         if (!redirectUri) missingVars.push('YOUTUBE_REDIRECT_URI');
         if (!scopes) missingVars.push('YOUTUBE_SCOPES');
 
-        console.error(`Missing environment variables: ${missingVars.join(', ')}.  Please set these environment variables.`);
+        console.warn(`Missing environment variables for YouTube API: ${missingVars.join(', ')}.  Attempting to load from credentials.json...`);
         return null;
     }
 
@@ -39,16 +38,53 @@ function loadCredentials() {
     };
 }
 
+function loadCredentialsFromFile() {
+    try {
+        const content = fs.readFileSync(CREDENTIALS_PATH, 'utf8');
+        const credentials = JSON.parse(content).web;
 
-/**
- * Creates and returns the OAuth2 client.  Initializes it if not already present.
- * @returns {google.auth.OAuth2} The OAuth2 client.
- */
+        if (!credentials || !credentials.client_id || !credentials.client_secret || !credentials.redirect_uris || !credentials.redirect_uris.length) {
+            console.error('Invalid credentials.json format or missing required fields.');
+            return null;
+        }
+
+        const scopes = process.env.YOUTUBE_SCOPES ? process.env.YOUTUBE_SCOPES.split(',') : [];
+        if (!scopes || scopes.length === 0) {
+            console.error('Scopes not defined in .env. Please set the YOUTUBE_SCOPES environment variable.');
+            return null; // Return null to indicate that credentials are not available
+        }
+
+        return {
+            clientId: credentials.client_id,
+            clientSecret: credentials.client_secret,
+            redirectUri: credentials.redirect_uris[0], // Assuming one redirect URI
+            scopes: scopes,
+        };
+    } catch (error) {
+        console.error('Error loading credentials from credentials.json:', error.message);
+        return null;
+    }
+}
+
+function loadCredentials() {
+    let credentials = loadCredentialsFromEnv();
+    if (!credentials) {
+        credentials = loadCredentialsFromFile();
+    }
+
+    if (credentials && (!credentials.scopes || credentials.scopes.length === 0)) {
+        console.error('YouTube API scopes are required. Please specify scopes in the YOUTUBE_SCOPES environment variable or credentials.json.');
+        return null;
+    }
+
+    return credentials;
+}
+
 function getOAuth2Client() {
     if (!oAuth2Client) {
         const credentials = loadCredentials();
         if (!credentials) {
-            throw new Error("Missing YouTube API credentials. Please ensure the necessary environment variables (YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REDIRECT_URI, and YOUTUBE_SCOPES) are set.");
+            throw new Error("Missing YouTube API credentials. Please ensure the necessary environment variables (YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REDIRECT_URI, and YOUTUBE_SCOPES) are set, or that credentials.json is correctly configured.");
         }
 
         oAuth2Client = new google.auth.OAuth2(
@@ -60,11 +96,6 @@ function getOAuth2Client() {
     return oAuth2Client;
 }
 
-
-/**
- * Generates the authorization URL.
- * @returns {string | null} The authorization URL or null if credentials are not available.
- */
 function generateAuthUrl() {
     const credentials = loadCredentials();
     if (!credentials) {
@@ -79,19 +110,10 @@ function generateAuthUrl() {
     return authUrl;
 }
 
-/**
- * Redirects the user to the Google authorization server.
- * @returns {string | null} The authorization URL or null if credentials are not available.
- */
 function initiateAuth() {
     return generateAuthUrl(); // Return the URL to allow the server to redirect.
 }
 
-/**
- * Handles the authorization response from Google.
- * @param {string} authorizationCode - The authorization code received from Google.
- * @returns {Promise<object>} An object containing the access and refresh tokens.
- */
 async function handleAuthCode(authorizationCode) {
     try {
         const oAuth2Client = getOAuth2Client();
@@ -109,12 +131,6 @@ async function handleAuthCode(authorizationCode) {
     }
 }
 
-/**
- * Refreshes the access token using the refresh token.
- * @param {string} refreshToken - The refresh token.
- * @returns {Promise<string>} The new access token.
- * @throws {Error} If the token refresh fails.
- */
 async function refreshAccessToken(refreshToken) {
     const oAuth2Client = getOAuth2Client();
     oAuth2Client.setCredentials({ refresh_token: refreshToken });
@@ -135,11 +151,6 @@ async function refreshAccessToken(refreshToken) {
     }
 }
 
-/**
- *  Authenticates the user and returns an authenticated OAuth2 client.
- *  Handles token refresh automatically.
- *  @returns {Promise<{client: google.auth.OAuth2, tokens: object | undefined}>}  An object containing the authenticated client and the tokens.
- */
 async function authenticate() {
     const oAuth2Client = getOAuth2Client();
     let tokens;
@@ -182,5 +193,30 @@ async function authenticate() {
     }
 }
 
+async function getAccessToken() {
+    try {
+        // 1. Check for existing access token.
+        if (accessToken) {
+            return accessToken;
+        }
 
-export { loadCredentials, generateAuthUrl, initiateAuth, handleAuthCode, refreshAccessToken, authenticate };
+        // 2. Authenticate (handles refresh token if available, or prompts for authorization).
+        const { client, tokens } = await authenticate();
+
+        // 3. If we have tokens (either refreshed or newly obtained), extract the access token.
+        if (tokens && tokens.access_token) {
+            accessToken = tokens.access_token; // Store the access token for later use
+            return accessToken;
+        }
+
+        // 4. If we *don't* have an access token after authentication, this is an error.
+        throw new Error('Failed to obtain access token after authentication.');
+
+
+    } catch (error) {
+        console.error('Error getting access token:', error);
+        throw parseYouTubeError(error); // Return a user-friendly error
+    }
+}
+
+export { loadCredentials, generateAuthUrl, initiateAuth, handleAuthCode, refreshAccessToken, authenticate, getAccessToken };

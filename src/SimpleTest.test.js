@@ -1,9 +1,13 @@
-// src/SimpleTest.test.js
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/extend-expect';
 
-const assert = require('assert');
+const SimpleElement = () => <div data-testid="myElement">Hello, World!</div>;
 
-describe('Simple Test', function() {
-  it('1 + 1 should equal 2', function() {
-    assert.strictEqual(1 + 1, 2, '1 + 1 should equal 2');
-  });
+test('renders a simple element and checks if it is in the document', () => {
+  render(<SimpleElement />);
+
+  const element = screen.getByTestId('myElement');
+
+  expect(element).toBeInTheDocument();
 });
