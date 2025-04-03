@@ -205,7 +205,7 @@ async function stopServer() {
         } else {
           console.log('Server stopped');
           resolve();
-        }
+        }  
       });
     } else {
       resolve();
