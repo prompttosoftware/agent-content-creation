@@ -1,79 +1,51 @@
-// server.js
-
-import express from 'express';
-import multer from 'multer';
-import path from 'path';
-import { uploadVideo } from './src/youtube/upload.js'; // Import uploadVideo
-import { generateAuthUrl, initiateAuth, handleAuthCode } from './src/youtube/auth.js';
-
+const express = require('express');
 const app = express();
-const port = process.env.PORT || 3000;
+const port = 3001; // Changed port to avoid EADDRINUSE
 
-app.use(express.static('public'));
+app.use(express.json());
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/'); // Destination folder for uploads
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-    },
+app.get('/api/hello', (req, res) => {
+  res.send('Hello, world!');
 });
 
-const upload = multer({ storage: storage });
-
-// Serve the upload form
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'upload.html'));
+app.post('/agent/update', (req, res) => {
+  // Handle agent update
+  res.status(200).send();
 });
 
-// Route to initiate Google authentication
-app.get('/auth/google', (req, res) => {
-    const authUrl = initiateAuth();
-    res.redirect(authUrl);
+app.post('/agent/done', (req, res) => {
+  // Handle agent done
+  res.status(200).send();
 });
 
-// Route to handle the Google authentication callback
-app.get('/oauth2callback', async (req, res) => {
-    const { code } = req.query;
-    try {
-        const tokens = await handleAuthCode(code);
-        res.send('Authentication successful! You can now upload videos.  <a href="/">Go back to upload form</a>');
-    } catch (error) {
-        console.error('Error handling auth code:', error);
-        res.status(500).send('Authentication failed.');
+let server;
+
+function startServer() {
+  return new Promise((resolve) => {
+    server = app.listen(port, () => {
+      console.log(`Server listening at http://localhost:${port}`);
+      resolve({ server, app });
+    });
+  });
+}
+
+function stopServer() {
+  return new Promise((resolve, reject) => {
+    if (server) {
+      server.close((err) => {
+        if (err) {
+          console.error('Error closing server:', err);
+          reject(err);
+          return;
+        }
+        console.log('Server stopped');
+        resolve();
+      });
+    } else {
+      console.log('Server not running');
+      resolve();
     }
-});
+  });
+}
 
-// Handle video uploads
-app.post('/upload', upload.single('video'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).send('No file uploaded.');
-    }
-
-    try {
-        const { title, description, categoryId, privacyStatus, tags } = req.body;
-        const filePath = req.file.path;
-
-        const videoMetadata = {
-            title: title || 'Untitled Video',
-            description: description || '',
-            categoryId: categoryId || '22', // Default category
-            privacyStatus: privacyStatus || 'private',
-            tags: tags ? tags.split(',') : [],
-        };
-
-        const videoId = await uploadVideo(filePath, videoMetadata);
-        res.send(`Video uploaded successfully! Video ID: ${videoId}`);
-
-    } catch (error) {
-        console.error('Error uploading video:', error);
-        res.status(500).send(`Upload failed: ${error.message}`);
-    }
-});
-
-app.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
-});
+module.exports = { app, startServer, stopServer };

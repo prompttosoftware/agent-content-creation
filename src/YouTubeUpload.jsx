@@ -17,6 +17,11 @@ const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
   const [authenticationUrl, setAuthenticationUrl] = useState(null); // Store the authentication URL
   const [accessToken, setAccessToken] = useState(null); // Store the access token
 
+  // State for video metadata input fields
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [privacyStatus, setPrivacyStatus] = useState('private'); // Default to private
+
   useEffect(() => {
     // Check for required environment variables
     if (
@@ -36,22 +41,33 @@ const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
   }, []);
 
   const handleUploadClick = async () => {
-    if (!videoFile || !metadata || !handleUpload) {
-      setUploadError('Missing required props for upload.');
+    if (!videoFile) {
+      setUploadError('Please select a video file.');
+      return;
+    }
+    if (!title) {
+      setUploadError('Please enter a title for the video.');
       return;
     }
 
     // Ensure we have an access token before uploading.
     try {
-        await getAccessToken();
+      await getAccessToken();
     } catch (authError) {
-        setUploadError(authError.message || "Authentication failed. Please try again.");
-        return; // Stop the upload process if authentication fails.
+      setUploadError(authError.message || "Authentication failed. Please try again.");
+      return; // Stop the upload process if authentication fails.
     }
 
     setUploading(true);
     setUploadError(null);
     setUploadComplete(false);
+
+    // Prepare metadata
+    const uploadMetadata = {
+      title,
+      description,
+      privacyStatus,
+    };
 
     try {
       // Read the video file
@@ -59,26 +75,27 @@ const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
       reader.onload = async (event) => {
         const videoDataUrl = event.target.result; // Get the data URL
         setVideoDataUrl(videoDataUrl); // Store the data URL in state
+
         // Construct upload parameters.  Adjust as needed.
         const uploadParams = {
           filePath: videoFile, // Keep file path, now that the data URL is stored.
-          metadata,
+          metadata: uploadMetadata,
         };
 
         // Call the handleUpload callback, passing the video file and metadata
         if (handleUpload) {
-          await handleUpload(videoFile, metadata);
+          await handleUpload(videoFile, uploadMetadata);
         }
 
         // Example using the uploadVideo function (replace with your actual upload logic)
         const accessToken = localStorage.getItem('youtube_access_token');
 
         //The uploadVideo function is updated to accept the video file and dataURL as well as the access token.
-        const uploadResponse = await uploadVideo(videoFile, videoDataUrl, uploadParams.metadata, accessToken);
+        const uploadResponse = await uploadVideo(videoFile, uploadDataUrl, uploadParams.metadata, accessToken);
 
         console.log('Video ID:', uploadResponse.id);
         setVideoId(uploadResponse.id);
-        
+
         setUploadComplete(true);
       };
       reader.onerror = (error) => {
@@ -104,7 +121,7 @@ const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
       // 1. Initiate authentication and get the URL
       const authUrl = initiateAuth();
       if (!authUrl) {
-          throw new Error("Could not generate authentication URL.  Check your credentials.");
+        throw new Error("Could not generate authentication URL.  Check your credentials.");
       }
       setAuthenticationUrl(authUrl);
       // 2. Redirect the user to the authentication URL (in a new tab/window, or using a modal)
@@ -182,6 +199,38 @@ const YouTubeUpload = ({ videoFile, metadata, handleUpload }) => {
       ) : (
           <p style={{ color: 'green' }}>Authenticated with YouTube!</p> // Show a message if authenticated.
       )}
+
+      {/* Video Metadata Input Fields */}
+      <div>
+        <label htmlFor="title">Title:</label>
+        <input
+          type="text"
+          id="title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </div>
+      <div>
+        <label htmlFor="description">Description:</label>
+        <textarea
+          id="description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+      <div>
+        <label htmlFor="privacy">Privacy:</label>
+        <select
+          id="privacy"
+          value={privacyStatus}
+          onChange={(e) => setPrivacyStatus(e.target.value)}
+        >
+          <option value="public">Public</option>
+          <option value="private">Private</option>
+          <option value="unlisted">Unlisted</option>
+        </select>
+      </div>
+
 
       <button onClick={handleUploadClick} disabled={uploading || !accessToken}> {/* Disable if not authenticated */}
         {uploading ? 'Uploading...' : 'Upload to YouTube'}

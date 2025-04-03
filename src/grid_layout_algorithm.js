@@ -133,3 +133,5 @@ function calculateGridLayout(numberOfAgents) {
     cellHeight: cellHeight,
   };
 }
+
+export default calculateGridLayout;

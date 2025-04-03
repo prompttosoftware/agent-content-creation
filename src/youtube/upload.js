@@ -1,77 +1,103 @@
 // src/youtube/upload.js
+
 import { google } from 'googleapis';
 import fs from 'fs';
-import path from 'path';
-import { authenticate } from './auth.js';
-import { handleApiError, handleUnexpectedError } from '../utils/errorHandling.js';
-import ffmpeg from 'fluent-ffmpeg';
-
-const CHUNK_SIZE = 256 * 1024; // 256KB - Adjust as needed for your network and video size
+import { getAccessToken } from './auth.js';
+import { parseYouTubeError } from '../utils/errorHandling.js';
+import path from 'path'; // Import path module
 
 /**
  * Uploads a video to YouTube.
- * @param {string} filePath - The path to the video file.
- * @param {object} videoMetadata - The video metadata (title, description, etc.).
- * @returns {Promise<string>} - The video ID.
- * @throws {Error} - If the upload fails.
+ * @param {string} videoFilePath - The path to the video file.
+ * @param {object} metadata - The video metadata (title, description, etc.).
+ * @param {string} metadata.title - The title of the video.
+ * @param {string} metadata.description - The description of the video.
+ * @param {string} metadata.privacyStatus - The privacy status of the video ('public', 'private', 'unlisted').
+ * @returns {Promise<string|null>} - The video ID if the upload is successful, or null if it fails.
  */
-async function uploadVideo(filePath, videoMetadata) {
-    console.log(`Starting video upload for: ${filePath}`); // Add logging at the start
+async function uploadVideo(videoFilePath, metadata) {
     try {
-        const { client: authClient } = await authenticate(); // Get the authenticated client
-        const youtube = google.youtube({ version: 'v3', auth: authClient });
+        // 1. Get the access token.
+        const accessToken = await getAccessToken();
 
-        // Check if the file exists
-        if (!fs.existsSync(filePath)) {
-            const errorMessage = `Video file not found: ${filePath}`;
-            console.error(errorMessage);
-            throw new Error(errorMessage);
+        const youtube = google.youtube({
+            version: 'v3',
+            auth: accessToken,
+        });
+
+        const { title, description, privacyStatus } = metadata;
+
+        // Validate required metadata
+        if (!title) {
+            throw new Error("Video title is required.");
+        }
+        if (!privacyStatus) {
+            throw new Error("Privacy status is required.");
         }
 
-        const fileSize = fs.statSync(filePath).size;
-        const fileSizeInMB = (fileSize / (1024*1024)).toFixed(2);
-        console.log(`File ${filePath} exists. Size: ${fileSizeInMB} MB`); // Log file size
+        // 2. Read the video file.
+        const videoBuffer = fs.readFileSync(videoFilePath);
+        const fileSize = videoBuffer.length;
 
-        const uploadStartTime = new Date(); // Start time for upload duration calculation
-
-        const uploadResponse = await youtube.videos.insert(
-            {
-                part: 'snippet,status',
-                requestBody: {
-                    snippet: {
-                        title: videoMetadata.title,
-                        description: videoMetadata.description,
-                        categoryId: videoMetadata.categoryId || '22', // Default to 'People & Blogs'
-                        tags: videoMetadata.tags || [],
-                    },
-                    status: {
-                        privacyStatus: videoMetadata.privacyStatus || 'private',
-                    },
+        // 3. Prepare the request.
+        const res = await youtube.videos.insert({
+            part: 'snippet,status',
+            requestBody: {
+                snippet: {
+                    title: title,
+                    description: description || '',
+                    categoryId: '22', // Default to 'People & Blogs'
                 },
-                media: {
-                    mimeType: 'video/mp4', // e.g., 'video/mp4' - MUST BE PROVIDED
-                    body: fs.createReadStream(filePath),
+                status: {
+                    privacyStatus: privacyStatus,
                 },
             },
-            {
-                onUploadProgress: (event) => {
-                    const progress = (event.bytesRead / fileSize) * 100;
-                    console.log(`${Math.round(progress)}% done`);
-                },
-            }
-        );
+            media: {
+                body: videoBuffer,
+            },
+        }, {
+            onUploadProgress: (event) => {
+                const progress = (event.bytesRead / fileSize) * 100;
+                console.log(`${Math.round(progress)}% uploaded`);
+            },
+        });
 
-        const uploadEndTime = new Date(); // End time for upload duration calculation
-        const uploadDuration = (uploadEndTime.getTime() - uploadStartTime.getTime()) / 1000; // in seconds
-
-        const videoId = uploadResponse.data.id;
-        console.log(`Video uploaded successfully. Video ID: ${videoId}. Upload duration: ${uploadDuration} seconds`);
+        // 4. Handle the response.
+        const videoId = res.data.id;
+        console.log(`Video uploaded successfully. Video ID: ${videoId}`);
         return videoId;
+
     } catch (error) {
         console.error('Error uploading video:', error);
-        const errorMessage = handleApiError(error, 'uploadVideo');
-        throw new Error(errorMessage); // Throw a more descriptive error
+        throw parseYouTubeError(error);
     }
 }
 
-export { uploadVideo };
+// Example usage (requires a test video and authentication setup)
+async function runUploadExample() {
+    const videoFilePath = path.join(process.cwd(), 'test_video.mp4'); // Use path.join for cross-platform compatibility
+    const videoMetadata = {
+        title: 'Test Upload Video',
+        description: 'This video was uploaded using the YouTube API.',
+        privacyStatus: 'unlisted', // Or 'public' or 'private'
+    };
+
+    try {
+        const videoId = await uploadVideo(videoFilePath, videoMetadata);
+        if (videoId) {
+            console.log(`Video ID: ${videoId}`);
+        } else {
+            console.log('Video upload failed.');
+        }
+    } catch (error) {
+        console.error('Error during upload example:', error);
+    }
+}
+
+// Run the example if the script is executed directly (not imported as a module)
+if (process.argv[1] === import.meta.url) {
+    runUploadExample();
+}
+
+
+module.exports = uploadVideo;
