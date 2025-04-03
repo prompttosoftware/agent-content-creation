@@ -1,68 +1,89 @@
-// src/scripts/create_test_video.js
-
+const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs');
-const cp = require('child_process');
-const path = require('path'); // Import the path module
+const path = require('path');
+const ffmpegStatic = require('ffmpeg-static');
+const { PNG } = require('pngjs'); // Import the PNG constructor directly
 
-// **Modified:** Use absolute path for FFmpeg.  Assume it's in the typical location.  **Important:**  This *must* be the correct path on the system.  If it's not, the script will fail.
-const ffmpegPath = '/usr/bin/ffmpeg';
+// **Modified:** Define the input frames.  Now uses pngjs to create a valid PNG.
+async function createDummyFrame(frameWidth, frameHeight) {
+    return new Promise((resolve, reject) => {
+        const png = new PNG({
+            width: frameWidth,
+            height: frameHeight,
+            bitDepth: 8, // Standard 8-bit depth
+            colorType: 6, // RGBA
+        });
 
-// Function to create a test video
-async function createTestVideo(outputFile, options = {}) {
-  const { width = 640, height = 480, duration = 5, framerate = 30, backgroundColor = 'red' } = options;
+        // Fill with a white background (RGBA)
+        for (let y = 0; y < png.height; y++) {
+            for (let x = 0; x < png.width; x++) {
+                const idx = ((png.width * y + x) << 2);
+                png.data[idx] = 255;   // Red
+                png.data[idx + 1] = 255; // Green
+                png.data[idx + 2] = 255; // Blue
+                png.data[idx + 3] = 255; // Alpha
+            }
+        }
 
-  return new Promise((resolve, reject) => {
-    // Define the FFmpeg command arguments
-    const args = [
-      '-y', // Overwrite output file if it exists
-      '-f', 'lavfi', // Use libavfilter for input
-      '-i', `color=c=${backgroundColor}:s=${width}x${height}:r=${framerate}`, // Use color source as input
-      '-t', duration.toString(), // Set duration in seconds
-      '-pix_fmt', 'yuv420p', // Pixel format (important for compatibility)
-      outputFile, // Output file path
-    ];
-
-    // Execute the FFmpeg command
-    const ffmpegProcess = cp.spawn(ffmpegPath, args);
-
-    // Handle process output
-    ffmpegProcess.stdout.on('data', (data) => {
-      console.log(`stdout: ${data}`);
+        png.pack((err, data) => {
+            if (err) {
+                reject(err);
+                return;
+            }
+            resolve(data);
+        });
     });
-
-    ffmpegProcess.stderr.on('data', (data) => {
-      console.error(`stderr: ${data}`);
-    });
-
-    ffmpegProcess.on('close', (code) => {
-      if (code === 0) {
-        console.log(`Successfully created test video: ${outputFile}`);
-        resolve(outputFile); // Resolve with the output file path
-      } else {
-        console.error(`FFmpeg process exited with code ${code}`);
-        reject(new Error(`FFmpeg failed with code ${code}`));
-      }
-    });
-
-    ffmpegProcess.on('error', (err) => {
-      console.error(`Failed to start FFmpeg process: ${err}`);
-      reject(err);
-    });
-  });
 }
 
-// Example Usage (uncomment to test)
-async function runExample() {
-  const outputFile = path.join(__dirname, 'test_video.mp4'); // Use path.join for cross-platform compatibility
-  try {
-    const createdVideoPath = await createTestVideo(outputFile, { duration: 5, backgroundColor: 'blue' }); // Example: 5 seconds, blue background
-    console.log(`Test video created successfully: ${createdVideoPath}`);
-  } catch (error) {
-    console.error(`Error creating test video: ${error}`);
-  }
+
+
+async function createTestVideo() {
+    const frameWidth = 1280;
+    const frameHeight = 720;
+    const framePath = path.join(__dirname, 'frame.png');
+    const outputPath = path.join(__dirname, 'test.mp4');
+
+    try {
+        // Generate a valid PNG frame using pngjs.
+        const frameData = await createDummyFrame(frameWidth, frameHeight);
+
+        fs.writeFile(framePath, frameData, (err) => {
+            if (err) {
+                console.error('Error writing PNG:', err);
+                return;
+            }
+            // **Modified:** Use the frame file as input, and specify the format as 'image2' and the framerate.
+
+            ffmpeg.setFfmpegPath(ffmpegStatic);
+
+            const command = ffmpeg(framePath)
+                .inputFormat('image2') // Important:  Specify the input format.
+                .inputOptions([
+                    '-framerate', '1'  // Set the frame rate.  Important for single image input.
+                ])
+                .videoCodec('libx264')
+                .size(`${frameWidth}x${frameHeight}`)
+                .format('mp4')
+                .output(outputPath);
+
+            command.on('start', (commandLine) => {
+                console.log('Spawned FFMPEG with command: ' + commandLine);
+            });
+
+            command.on('end', () => {
+                console.log(`Video created successfully at ${outputPath}`);
+                fs.unlinkSync(framePath);
+            });
+
+            command.on('error', (err) => {
+                console.error('Error creating video:', err);
+            });
+
+            command.run();
+        });
+    } catch (error) {
+        console.error('Error creating frame:', error);
+    }
 }
 
-runExample(); // Call the example function to run the script
-
-
-module.exports = createTestVideo;
+createTestVideo();
