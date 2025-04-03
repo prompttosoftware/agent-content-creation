@@ -52,7 +52,7 @@ function VideoGrid({ agents, onAgentRemoved }) {
       {agents.map((agent, index) => {
         const agentContent = agentContentMap[agent.id];
         return (
-          <div key={index} className="video-item" style={{
+          <div key={agent.id} className="video-item" style={{
             width: `${cellWidth}%`,
             height: `${cellHeight}%`
           }}>
